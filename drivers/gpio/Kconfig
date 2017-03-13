@@ -1008,6 +1008,20 @@ config GPIO_MC33880
 	  SPI driver for Freescale MC33880 high-side/low-side switch.
 	  This provides GPIO interface supporting inputs and outputs.
 
+config GPIO_VNI8200
+        tristate "ST VNI8200 high-side/low-side switch"
+	depends on SPI_MASTER
+	help
+	  SPI driver for ST VNI8200 high-side/low-side switch.
+	  This provides GPIO interface supporting outputs.
+
+config GPIO_MAX31913
+        tristate "Digital Input translator - serializer"
+	depends on SPI_MASTER
+	help
+	  SPI driver for MAX31913 industrial interface serializer / translator
+	  This provides GPIO interface supporting inputs.
+
 endmenu
 
 menu "SPI or I2C GPIO expanders"

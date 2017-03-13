@@ -636,6 +636,14 @@ config VIDEO_S5K4ECGA
 	  camera sensor with an embedded SoC image signal processor.
 	  This sensor is revised version of S5K4ECGX.
 
+config VIDEO_OV5640
+	tristate "Kitra ov5640 sensor support"
+	depends on I2C && VIDEO_V4L2 && VIDEO_V4L2_SUBDEV_API
+	---help---
+	  This is a V4L2 sensor-level driver for IMX219 camera
+	  sensor with an embedded SoC image signal processor.
+
+
 source "drivers/media/i2c/smiapp/Kconfig"
 
 config VIDEO_S5C73M3

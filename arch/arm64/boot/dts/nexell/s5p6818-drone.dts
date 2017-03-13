@@ -323,7 +323,7 @@
 			};
 		};
 	};	/*** soc ***/
-
+/*
 	panel: panel-simple {
 		compatible = "samsung,ltn101nt05", "simple-panel";
 		status = "okay";
@@ -341,6 +341,7 @@
 			};
 		};
 	};
+*/
 };
 
 &dp_drm {
@@ -360,7 +361,7 @@
 		};
 	};
 };
-
+/*
 &dp_drm_rgb {
 	remote-endpoint = <&rgb_panel>;
 	status = "okay";
@@ -385,3 +386,4 @@
 		ev_end_offset = <0>;
 	};
 };
+*/

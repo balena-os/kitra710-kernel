@@ -108,9 +108,11 @@ static int alc5658_hw_params(struct snd_pcm_substream *substream,
 static int alc5658_suspend_pre(struct snd_soc_card *card)
 {
 	dev_dbg(card->dev, "+%s\n", __func__);
+#if 0 //SQR
 #ifdef CONFIG_GPIOLIB
 	if (amp_io > 0)
 		gpio_set_value(amp_io, 0);
+#endif
 #endif
 	return 0;
 }
@@ -180,6 +182,7 @@ static struct snd_soc_ops alc5658_ops = {
 static int alc5658_spk_event(struct snd_soc_dapm_widget *w,
 				struct snd_kcontrol *k, int event)
 {
+#if 0 //SQR
 #ifdef CONFIG_GPIOLIB
 	if (amp_io > 0) {
 		if (SND_SOC_DAPM_EVENT_ON(event))
@@ -188,8 +191,11 @@ static int alc5658_spk_event(struct snd_soc_dapm_widget *w,
 			gpio_set_value(amp_io, 0);
 	}
 #endif
+#endif
+
 	return 0;
 }
+
 
 /* alc5658 machine dapm widgets */
 static const struct snd_soc_dapm_widget alc5658_dapm_widgets[] = {
@@ -197,6 +203,27 @@ static const struct snd_soc_dapm_widget alc5658_dapm_widgets[] = {
 	/* TODO: change initial path */
 	SND_SOC_DAPM_HP("Headphone Jack", NULL),
 	/* TODO: change initial path */
+	SND_SOC_DAPM_MIC("IN2P", NULL),
+};
+
+/* Corgi machine audio map (connections to the codec pins) */
+static const struct snd_soc_dapm_route alc5658_audio_map[] = {
+	/* headphone connected to HPOL, HPOR */ /* TODO: change initial path */
+	{"Headphone Jack", NULL, "HP"},
+	/* speaker connected to HPOL, HPOR */ /* TODO: change initial path */
+	{"Ext Spk", NULL, "HP"},
+	/* Main Mic Connected to IN2P */
+	{"IN2P", NULL, "MIC_IN"},
+};
+
+#if 0 // SQR ORIGINAL CODE
+/* alc5658 machine dapm widgets */
+static const struct snd_soc_dapm_widget alc5658_dapm_widgets[] = {
+	SND_SOC_DAPM_SPK("Ext Spk", alc5658_spk_event),
+	/* TODO: change initial path */
+	SND_SOC_DAPM_HP("Headphone Jack", NULL),
+	/* TODO: change initial path */
+	SND_SOC_DAPM_MIC("IN2P", NULL),
 	SND_SOC_DAPM_MIC("Main Mic", NULL),
 };
 
@@ -212,6 +239,9 @@ static const struct snd_soc_dapm_route alc5658_audio_map[] = {
 	{"IN2P", NULL, "MICBIAS1"},
 	{"IN2P", NULL, "Main Mic"},
 };
+#endif
+
+
 
 /* Headphones jack detection DAPM pin */
 static struct snd_soc_jack_pin jack_pins[] = {
@@ -234,9 +264,11 @@ static int alc5658_dai_init(struct snd_soc_pcm_runtime *rtd)
 	int ret;
 
 	alc5658 = codec;
+#if 0	//SQR ORIGINAL CODE
 	/* set endpoints to not connected */
 	snd_soc_dapm_nc_pin(dapm, "DMIC");/* TODO: change initial path */
 	snd_soc_dapm_nc_pin(dapm, "MIC2");/* TODO: change initial path */
+#endif
 	if (NULL == jack->name)
 		return 0;
 
@@ -262,7 +294,8 @@ static struct snd_soc_dai_link alc5658_dai_link = {
 	.name = "ASOC-ALC5658",
 	.stream_name = "ALC5658_AIF1",
 	.cpu_dai_name = str_dai_name,
-	.codec_dai_name = "rt5659-aif1",
+	.codec_dai_name = "sgtl5000",
+	/*.codec_dai_name = "rt5659-aif1",*/
 	.ops = &alc5658_ops,
 	.symmetric_rates = 1,
 	.init = alc5658_dai_init,
@@ -296,6 +329,7 @@ static int alc5658_probe(struct platform_device *pdev)
 	int ch;
 	const char *format_name;
 
+
 	/* set I2S name */
 	of_property_read_u32(pdev->dev.of_node, "ch", &ch);
 	sprintf(str_dai_name, "%x%s",
@@ -323,6 +357,7 @@ static int alc5658_probe(struct platform_device *pdev)
 	} else {
 		jack->name = NULL;
 	}
+#if 0 //SQR 
 #ifdef CONFIG_GPIOLIB
 	amp_io = of_get_named_gpio(pdev->dev.of_node, "amp-gpio", 0);
 	if (gpio_is_valid(amp_io)) {
@@ -340,6 +375,8 @@ static int alc5658_probe(struct platform_device *pdev)
 				amp_io);
 	}
 #endif
+#endif
+
 	card->dev = &pdev->dev;
 	if (!alc5658_dai_link.codec_name) {
 		alc5658_dai_link.codec_name = NULL;
@@ -398,12 +435,15 @@ static int alc5658_remove(struct platform_device *pdev)
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 
 	snd_soc_unregister_card(card);
+#if 0 //SQR 
 #ifdef CONFIG_GPIOLIB
 	if (amp_io > 0) {
 		gpio_set_value(amp_io, 0);
 		devm_gpio_free(&pdev->dev, amp_io);
 	}
 #endif
+#endif
+
 	return 0;
 }
 #ifdef CONFIG_OF

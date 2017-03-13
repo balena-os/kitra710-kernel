@@ -43,10 +43,10 @@
 		i2c5 = &i2c_gpio5;
 		i2c6 = &i2c_gpio6;
 		i2c7 = &i2c_gpio7;
-		i2c8 = &i2c_gpio8;
-		i2c9 = &i2c_gpio9;
+		/*i2c8 = &i2c_gpio8;*/
+		/*i2c9 = &i2c_gpio9;*/
 		i2c10 = &i2c_gpio10;
-		i2c11 = &i2c_gpio11;
+		/*i2c11 = &i2c_gpio11;*/
 	};
 
 	nx-v4l2 {
@@ -155,22 +155,32 @@
 			#address-cells = <0x1>;
 			#size-cells = <0x0>;
 
-			snps,phy-addr = <3>;
+			snps,phy-addr = <0>;
 			snps,reset-gpio = <&gpio_a 12 0>;
 			snps,reset-active-low;
 			snps,reset-delays-us = <0 10000 30000>;
+			phy-mode = "rmii";
+			
 
 			mdio {
 				#address-cells = <1>;
 				#size-cells = <0>;
 
-				ethernet_phy: ethernet-phy@3 {
-					reg = <3>;
-					fixed-link {
-						speed = <1000>;
-						full-duplex;
-					};
+				ethernet_phy: ethernet-phy@0 {
+					compatible = "micrel,ksz8031";
+					micrel,rmii-reference-clock-select-25-mhz;
+					clocks = <&mdc>;
+					clock-names = "rmii-ref";
+					phy-handle = <&ethernet_phy>;
+					reg = <0>;
 				};
+
+			};
+
+			mdc: rmii-ref {
+				#clock-cells = <0>;
+				compatible ="fixed-clock";
+				clock-frequency = <50000000>;
 			};
 		};
 
@@ -204,13 +214,6 @@
 				nexell,pin-strength = <0>;
 			};
 
-			touchpanel_irq: touchpanel-irq {
-				nexell,pins = "gpiob-22";
-				nexell,pin-function = <1>;
-				nexell,pin-pull = <1>;
-				nexell,pin-strength = <0>;
-			};
-
 			tsp_irq: tsp-irq {
 				nexell,pins = "gpiob-8";
 				nexell,pin-function = <0>;
@@ -224,10 +227,16 @@
 				nexell,pin-pull = <1>;
 				nexell,pin-strength = <0>;
 			};
+                        /*
+                        led_rgb: led-rgb {
+				nexell,pins = "gpiob-11";
+				nexell,pin-function = <0>;
+				nexell,pin-pull = <1>;
+				nexell,pin-strength = <0>;
+			};*/
 		};
 
-		spdif_tx: spdiftx@c0059000 {
-			#sound-dai-cells = <1>;
+		spdiftx@c0059000 {
 			pcm-bit = <16>;
 			sample_rate = <48000>;
 			status = "okay";
@@ -239,7 +248,6 @@
 		};
 
 		i2s_0:i2s@c0055000 {
-			#sound-dai-cells = <1>;
 			master-mode = <1>;
 			mclk-in = <0>;
 			trans-mode = <0>;
@@ -272,9 +280,9 @@
 			status = "okay";
 			sensor {
 				type = <NX_CAPTURE_SENSOR_I2C>;
-				i2c_name = "S5K4ECGA";
+				i2c_name = "OV5640";
 				i2c_adapter = <0>;
-				addr = <0x56>;
+				addr = <0x3c>;
 			};
 			power {
 				enable_seq = <
@@ -317,6 +325,7 @@
 
 	panel: panel-simple {
 		compatible = "dongguan,gst7d0038";
+		enable-gpios = <&gpio_e 30 0>;
 		backlight = <&backlight>;
 		status = "okay";
 
@@ -336,7 +345,6 @@
 		#size-cells = <0>;
 
 		alc5658: alc5658@1a {
-			#sound-dai-cells = <0>;
 			compatible = "realtek,rt5658";
 			reg = <0x1a>;
 		};
@@ -353,39 +361,13 @@
 	};
 
 	sound {
-		compatible = "simple-audio-card";
-		simple-audio-card,name = "Artik710 raptor Audio";
-		simple-audio-card,mclk-fs = <256>;
-		simple-audio-card,widgets =
-		    "Headphone", "Out Jack",
-		    "Microphone", "In Jack";
-		simple-audio-card,routing =
-		    "Out Jack", "HPOL",
-		    "Out Jack", "HPOR",
-		    "IN2P", "In Jack",
-		    "IN2P", "In Jack";
-		status = "okay";
-
-		simple-audio-card,dai-link@0 {
-		    format = "i2s";
-		    cpu {
-			sound-dai = <&i2s_0 0>;
-		    };
-
-		    codec {
-			sound-dai = <&alc5658>;
-		    };
-		};
-
-		simple-audio-card,dai-link@1 {
-		    cpu {
-			sound-dai = <&spdif_tx 0>;
-		    };
-
-		    codec {
-			sound-dai = <&spdif_out>;
-		    };
-		};
+		compatible = "nexell,nexell-alc5658";
+		ch = <0>;
+		sample-rate = <48000>;
+		format = "S16";
+		hpin-support = <0>;
+		nexell,i2s-controller = <&i2s_0>;
+		audio-codec = <&sgtl5000>;
 	};
 
 	i2c_gpio4: i2c@4 {
@@ -450,22 +432,50 @@
 			gpio-key,wakeup;
 		};
 	};
+         
+        leds {
+            compatible = "gpio-leds";
+                  
+            ledR {
+                label = "ledR" ;
+                gpios = <&gpio_b 11 0> ;
+             
+            } ; 
+            ledG {
+                label = "ledG" ;
+                gpios = <&gpio_b 18 0> ;
+             
+            } ; 
+            ledB {
+                label = "ledB" ;
+                gpios = <&gpio_a 14 0> ;
+             
+            } ; 
 
+        } ;   
+
+
+        
 	spdif_out: spdif-out {
-		#sound-dai-cells = <0>;
 		compatible = "linux,spdif-dit";
+	};
+
+	spdif-transceiver {
+		compatible = "nexell,spdif-transceiver";
+		sample_rate = <48000>;
+		format = "S16";
 	};
 
 	i2c_gpio3: i2c@3 {
 		status = "disabled";
 	};
-
+/*
 	i2c_gpio8: i2c@8 {
 		compatible = "i2c-gpio";
-		gpios = <&gpio_a 13 0	/* sda */
-			&gpio_a 9 0		/* scl */
+		gpios = <&gpio_a 13 0	
+			&gpio_a 9 0
 			>;
-		i2c-gpio,delay-us = <1>;	/* ~100kHz */
+		i2c-gpio,delay-us = <1>;
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
@@ -493,13 +503,14 @@
 		};
 
 	};
-
+*/
+        /*
 	i2c_gpio9: i2c@9 {
 		compatible = "i2c-gpio";
-		gpios = <&gpio_a 19 0	/* sda */
-			&gpio_a 20 0	/* scl */
+		gpios = <&gpio_a 19 0	
+			&gpio_a 20 0	/
 			>;
-		i2c-gpio,delay-us = <1>;	/* ~100kHz */
+		i2c-gpio,delay-us = <1>;	
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
@@ -510,6 +521,7 @@
 			ti,chg_current = <1000 1500 2000>;
 		};
 	};
+        */
 
 	i2c_gpio10: i2c@10 {
 		compatible = "i2c-gpio";
@@ -531,11 +543,11 @@
 			pinctrl-0 = <&pmic_irq>;
 		};
 	};
-
+        /*
 	i2c_gpio11: i2c@11 {
 		compatible = "i2c-gpio";
-		gpios = <&gpio_b 18 0	/* sda */
-			&gpio_b 11 0	/* scl */
+		gpios = <&gpio_b 18 0	
+			&gpio_b 11 0	
 			>;
 
 		i2c-gpio,delay-us = <1>;
@@ -543,6 +555,7 @@
 		#size-cells = <0>;
 		status = "okay";
 	};
+        */
 
 	regulators {
 		VCC_DCDC0:
@@ -667,49 +680,94 @@
 	status = "okay";
 };
 
+&spi_0 {
+	status = "okay";
+        cs-gpios = <&gpio_c 30 0> ;
+
+        lsm6ds3@c0{
+            compatible = "st,lsm6ds3";
+            reg = <0>;
+            spi-max-frequency = <1000000>;
+            interrupt-parent = <&gpio_a>;
+            interrupts = <9 IRQ_TYPE_EDGE_RISING>;
+            st,drdy-int-pin = <1>;
+            controller-data {
+                samsung,spi-feedback-delay = <0>;
+            };
+        };
+
+};
+
 &spi_2 {
 	status = "okay";
-	cs-gpios = <&gpio_c 10 0>;
-	spidev@0 {
-		compatible = "linux,spidev";
-		reg = <0>;
-		spi-max-frequency = <10000000>;
-		controller-data {
-			samsung,spi-feedback-delay = <0>;
-		};
-	};
+	//cs-gpios = <&gpio_c 10 0>;
+        cs-gpios = <&gpio_c 10 0>, <&gpio_c 27 0> ;   
+   
+    vni8200@0 {
+        compatible = "st,vni8200";
+        reg = <0>;
+        base = <240> ;
+        cs-gpio =<&gpio_b 22 0>;
+        spi-max-frequency = <1000000>;
+        gpio-controller ;
+        controller-data {
+            samsung,spi-feedback-delay = <0>;
+        };
+
+    };
+     max31913@1 {
+        compatible = "maxim,max31913";
+        reg = <1>;
+        base = <250> ;
+        cs-gpio =<&gpio_c 27 0>;
+        spi-max-frequency = <1000000>;
+        gpio-controller ;
+        controller-data {
+            samsung,spi-feedback-delay = <0>;
+        };
+
+    };
 };
 
 &i2c_1 {
 	status = "okay";
+
+	hts221@5f {
+        compatible = "st,hts221";
+        reg = <0x5f>;
+        interrupt-parent = <&gpio_a>;
+        interrupts = <18 IRQ_TYPE_EDGE_RISING>;
+        };
+      
+        vl53l0@29 {
+        compatible = "st,stmvl53l0";
+        reg = <0x29>;
+        #interrupt-parent = <&gpio_a>;
+        #interrupts = <18 IRQ_TYPE_EDGE_RISING>;
+        };
+
+       sgtl5000: sgtl5000@0a {
+               compatible = "fsl,sgtl5000";
+               reg = <0x0a>;
+               //clocks = <&refclk CLK_ID_I2S_0>;
+               clocks = <&i2s0>;
+	       micbias-resistor-k-ohms = <2>;
+               VDDA-supply = <&VCC_LDO8>;
+               VDDIO-supply = <&VCC_LDO8>;
+               VDDD-supply = <&VCC_LDO4>;
+               gpio-spk-r = <&gpio_b 8 0>;
+               gpio-spk-l = <&gpio_e 30 0>;
+               gpio-spk-amp1 = <&gpio_c 0 0>;
+               gpio-spk-amp2 = <&gpio_c 25 0>;
+       };
+
 };
 
 &i2c_2 {
 	#address-cells = <1>;
 	#size-cells = <0>;
 	status = "okay";
-
-	touchscreen@4a {
-		compatible = "atmel,maxtouch";
-		reg = <0x4a>;
-		interrupt-parent = <&gpio_b>;
-		interrupts = <22 IRQ_TYPE_EDGE_FALLING>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&touchpanel_irq>;
-		skip-cfg-load;
-		switch-xy;
-	};
-
-	touchscreen@20 {
-		compatible = "zinitix,zinitix_touch";
-		reg = <0x20>;
-		interrupt-parent = <&gpio_b>;
-		interrupts = <8 IRQ_TYPE_EDGE_FALLING>;
-		reset-gpio = <&gpio_c 25 1>;
-		int-gpio = <&gpio_b 8 0>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&tsp_irq &tsp_reset>;
-	};
+         
 };
 
 &pwm {
@@ -797,8 +855,4 @@
 		clk_div_lv1 = <1>;
 		out_format = <3>;
 	};
-};
-
-&decimator_0 {
-	status = "okay";
 };

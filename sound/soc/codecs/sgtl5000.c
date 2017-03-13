@@ -22,6 +22,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/consumer.h>
 #include <linux/of_device.h>
+#include <linux/of_gpio.h>
 #include <sound/core.h>
 #include <sound/tlv.h>
 #include <sound/pcm.h>
@@ -29,6 +30,7 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 #include <sound/initval.h>
+#include <linux/gpio.h> 
 
 #include "sgtl5000.h"
 
@@ -141,6 +143,12 @@ struct sgtl5000_priv {
 	int revision;
 	u8 micbias_resistor;
 	u8 micbias_voltage;
+	unsigned int gpioSPK_R;
+	unsigned int gpioSPK_L;
+	unsigned int gpioSPKAmp1;
+	unsigned int gpioSPKAmp2;
+	unsigned int boot_cnt;
+	unsigned int ampVal;
 };
 
 /*
@@ -415,6 +423,45 @@ static const DECLARE_TLV_DB_RANGE(mic_gain_tlv,
 /* tlv for hp volume, -51.5db to 12.0db, step .5db */
 static const DECLARE_TLV_DB_SCALE(headphone_volume, -5150, 50, 0);
 
+static int get_amp(struct snd_kcontrol *kcontrol,
+                         struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+	
+    	ucontrol->value.integer.value[0] = sgtl5000->ampVal;
+
+    	return 0;
+}
+
+
+static int put_amp(struct snd_kcontrol *kcontrol,
+                         struct snd_ctl_elem_value *ucontrol)
+{
+	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+   	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+
+    	sgtl5000->ampVal = ucontrol->value.integer.value[0];
+
+	if (gpio_is_valid(sgtl5000->gpioSPKAmp1))
+       		gpio_set_value(sgtl5000->gpioSPKAmp1, sgtl5000->ampVal & 1);
+	if (gpio_is_valid(sgtl5000->gpioSPKAmp2))
+        	gpio_set_value(sgtl5000->gpioSPKAmp2, sgtl5000->ampVal & 2);
+
+    return 0;
+}
+
+static int info_amp(struct snd_kcontrol *kcontrol,
+                          struct snd_ctl_elem_info *uinfo)
+{
+    uinfo->type = SNDRV_CTL_ELEM_TYPE_INTEGER;
+    uinfo->count = 1;
+    uinfo->value.integer.min = 0;
+    uinfo->value.integer.max = 3;
+    return 0;
+}
+
+
 static const struct snd_kcontrol_new sgtl5000_snd_controls[] = {
 	/* SOC_DOUBLE_S8_TLV with invert */
 	{
@@ -426,6 +473,16 @@ static const struct snd_kcontrol_new sgtl5000_snd_controls[] = {
 		.get = dac_get_volsw,
 		.put = dac_put_volsw,
 	},
+	{
+         	.iface = SNDRV_CTL_ELEM_IFACE_MIXER,
+            	.name = "Playback AMP",
+            	.access = SNDRV_CTL_ELEM_ACCESS_TLV_READ |
+                      	SNDRV_CTL_ELEM_ACCESS_READWRITE,
+            	.info = info_amp,
+            	.get = get_amp,
+            	.put = put_amp,
+    	},
+
 
 	SOC_DOUBLE("Capture Volume", SGTL5000_CHIP_ANA_ADC_CTRL, 0, 4, 0xf, 0),
 	SOC_SINGLE_TLV("Capture Attenuate Switch (-6dB)",
@@ -449,13 +506,33 @@ static const struct snd_kcontrol_new sgtl5000_snd_controls[] = {
 static int sgtl5000_digital_mute(struct snd_soc_dai *codec_dai, int mute)
 {
 	struct snd_soc_codec *codec = codec_dai->codec;
+	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+
 	u16 adcdac_ctrl = SGTL5000_DAC_MUTE_LEFT | SGTL5000_DAC_MUTE_RIGHT;
+
+	 if(mute){
+		if (gpio_is_valid(sgtl5000->gpioSPK_R))
+       	 		gpio_set_value(sgtl5000->gpioSPK_R, 0);
+		if (gpio_is_valid(sgtl5000->gpioSPK_L))
+        		gpio_set_value(sgtl5000->gpioSPK_L, 0);
+    	}
+	else{
+        	if(sgtl5000->boot_cnt == 0 ){
+		if (gpio_is_valid(sgtl5000->gpioSPK_R))
+       	 		gpio_set_value(sgtl5000->gpioSPK_R, 1);
+		if (gpio_is_valid(sgtl5000->gpioSPK_L))
+        		gpio_set_value(sgtl5000->gpioSPK_L, 1);
+        	}
+    	}
 
 	snd_soc_update_bits(codec, SGTL5000_CHIP_ADCDAC_CTRL,
 			adcdac_ctrl, mute ? adcdac_ctrl : 0);
 
 	return 0;
 }
+
+
+
 
 /* set codec format */
 static int sgtl5000_set_dai_fmt(struct snd_soc_dai *codec_dai, unsigned int fmt)
@@ -727,6 +804,17 @@ static int sgtl5000_pcm_hw_params(struct snd_pcm_substream *substream,
 		return -EFAULT;
 	}
 
+	 if (sgtl5000->boot_cnt > 0){
+        	sgtl5000->boot_cnt--;
+    	}
+	else {
+		if (gpio_is_valid(sgtl5000->gpioSPK_R))
+                        gpio_set_value(sgtl5000->gpioSPK_R, 1);
+                if (gpio_is_valid(sgtl5000->gpioSPK_L))
+                        gpio_set_value(sgtl5000->gpioSPK_L, 1);
+    	}
+
+
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK)
 		stereo = SGTL5000_DAC_STEREO;
 	else
@@ -981,6 +1069,46 @@ static int sgtl5000_set_bias_level(struct snd_soc_codec *codec,
 
 	return 0;
 }
+
+
+#ifdef CONFIG_SUSPEND
+static int sgtl5000_suspend(struct snd_soc_codec *codec)
+{
+	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+	
+	//sgtl5000_set_bias_level(codec, SND_SOC_BIAS_OFF);
+	if (gpio_is_valid(sgtl5000->gpioSPK_R))
+		gpio_set_value(sgtl5000->gpioSPK_R, 0);
+	if (gpio_is_valid(sgtl5000->gpioSPK_L))
+        	gpio_set_value(sgtl5000->gpioSPK_L, 0);
+	return 0;
+}
+
+/*
+ * restore all sgtl5000 registers,
+ * since a big hole between dap and regular registers,
+ * we will restore them respectively.
+ */
+static int sgtl5000_restore_regs(struct snd_soc_codec *codec)
+{
+    return 0;
+}
+
+static int sgtl5000_resume(struct snd_soc_codec *codec)
+{
+	/* Bring the codec back up to standby to enable regulators */
+	sgtl5000_set_bias_level(codec, SND_SOC_BIAS_STANDBY);
+
+	/* Restore registers by cached in memory */
+	sgtl5000_restore_regs(codec);
+	return 0;
+}
+#else
+#define sgtl5000_suspend NULL
+#define sgtl5000_resume  NULL
+#endif	/* CONFIG_SUSPEND */
+
+
 
 #define SGTL5000_FORMATS (SNDRV_PCM_FMTBIT_S16_LE |\
 			SNDRV_PCM_FMTBIT_S20_3LE |\
@@ -1330,15 +1458,61 @@ err_ldo_remove:
 
 }
 
+void snd_soc_gpio_init(struct snd_soc_codec *codec)
+{
+	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+
+	struct device_node *sgtl5000_codec_node = NULL;
+	
+	/*Init boot Cnt*/
+	sgtl5000->boot_cnt = 7;
+
+        sgtl5000_codec_node = of_find_node_by_name(codec->dev->parent->of_node,
+                                                  "sgtl5000");
+
+	sgtl5000->gpioSPK_R = of_get_named_gpio(sgtl5000_codec_node,
+                                                   "gpio-spk-r", 0);
+	if (gpio_is_valid(sgtl5000->gpioSPK_R))
+	{
+		gpio_request(sgtl5000->gpioSPK_R, "sysfs");
+		gpio_direction_output(sgtl5000->gpioSPK_R, 0);
+	}
+
+	sgtl5000->gpioSPK_L = of_get_named_gpio(sgtl5000_codec_node,
+                                                   "gpio-spk-l", 0);
+	if (gpio_is_valid(sgtl5000->gpioSPK_L))
+	{
+		gpio_request(sgtl5000->gpioSPK_L, "sysfs");
+		gpio_direction_output(sgtl5000->gpioSPK_L, 0);
+	}
+
+	sgtl5000->gpioSPKAmp1 = of_get_named_gpio(sgtl5000_codec_node,
+                                                   "gpio-spk-amp1", 0);
+	if (gpio_is_valid(sgtl5000->gpioSPKAmp1))
+	{
+		gpio_request(sgtl5000->gpioSPKAmp1, "sysfs");
+		gpio_direction_output(sgtl5000->gpioSPKAmp1, 0);
+	}
+
+	sgtl5000->gpioSPKAmp2 = of_get_named_gpio(sgtl5000_codec_node,
+                                                   "gpio-spk-amp2", 0);
+	if (gpio_is_valid(sgtl5000->gpioSPKAmp2))
+	{
+		gpio_request(sgtl5000->gpioSPKAmp2, "sysfs");
+		gpio_direction_output(sgtl5000->gpioSPKAmp2, 0);
+	}
+}
+
+
 static int sgtl5000_probe(struct snd_soc_codec *codec)
 {
 	int ret;
 	struct sgtl5000_priv *sgtl5000 = snd_soc_codec_get_drvdata(codec);
+	
 
 	ret = sgtl5000_enable_regulators(codec);
 	if (ret)
 		return ret;
-
 	/* power up sgtl5000 */
 	ret = sgtl5000_set_power_regs(codec);
 	if (ret)
@@ -1385,6 +1559,9 @@ static int sgtl5000_probe(struct snd_soc_codec *codec)
 	 * Enable DAP in kcontrol and dapm.
 	 */
 	snd_soc_write(codec, SGTL5000_DAP_CTRL, 0);
+	
+	/*Call Gpio Init Function*/
+	snd_soc_gpio_init(codec);
 
 	return 0;
 
@@ -1414,6 +1591,8 @@ static int sgtl5000_remove(struct snd_soc_codec *codec)
 static struct snd_soc_codec_driver sgtl5000_driver = {
 	.probe = sgtl5000_probe,
 	.remove = sgtl5000_remove,
+	.resume = sgtl5000_resume,
+	.suspend = sgtl5000_suspend,
 	.set_bias_level = sgtl5000_set_bias_level,
 	.suspend_bias_off = true,
 	.controls = sgtl5000_snd_controls,
@@ -1481,7 +1660,7 @@ static int sgtl5000_i2c_probe(struct i2c_client *client,
 		dev_err(&client->dev, "Failed to allocate regmap: %d\n", ret);
 		return ret;
 	}
-
+	
 	sgtl5000->mclk = devm_clk_get(&client->dev, NULL);
 	if (IS_ERR(sgtl5000->mclk)) {
 		ret = PTR_ERR(sgtl5000->mclk);
@@ -1556,7 +1735,8 @@ static int sgtl5000_i2c_probe(struct i2c_client *client,
 			sgtl5000->micbias_voltage = 0;
 		}
 	}
-
+	
+	
 	i2c_set_clientdata(client, sgtl5000);
 
 	/* Ensure sgtl5000 will start with sane register values */
